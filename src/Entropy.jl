@@ -1,5 +1,4 @@
 module Entropy
 
-# package code goes here
-
+include("binless.jl")
 end # module
