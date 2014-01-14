@@ -22,24 +22,18 @@ function entropy{T<:Real}(x::Array{T,1})
     return H
 end
 
-function test_entropy()
-    srand(1234)
-    x = randn(1000)
-    E = entropy(x)
-    Base.Test.@test_approx_eq E 2.0082391501948837
-    println("Test passed. E = $E")
+function entropy{T<:Real}(X::Array{T,2})
+    #find the minimum distance between pairs of columns
+    ndims = size(X,1)
+    N = size(X,2)
+    d = Distance.pairwise(Distance.Euclidean(),X)
+    #find the minimum distance for each pair
+    d[d.==0] = Inf
+    md = minimum(d,2)
+    S = spherical_volume(ndims)
+    H = (ndims/N)*sum(log2(md)) + log2(S*(N-1)/ndims) + eulergamma/log(2)
 end
 
-function compteEntropy(X::Array{Float64,2})
-    #find the minimum distance between pairs of columns
-    nvars = size(S,1)
-    ntrains = size(S,2)
-    d = Distance.pairwise(Distance.Euclidian,X)
-    #find the minimum distance for each pair
-    d[d.==0] = inf
-    md = zeros(ntrains)
-    for i=1:ntrains
-        md[i] = min(d[i])
-    end
-
+function spherical_volume(r::Real)
+    return r*pi^(r/2)/gamma(r/2+1)
 end
