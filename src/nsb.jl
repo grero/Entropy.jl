@@ -40,7 +40,7 @@ function s1{T<:Integer}(n::Array{T,1},B::Real, K::Integer)
     N = sum(n)
     C = 0.0
     for i=1:K
-        C += (n[i]+B)polygamma(0,n[i]+B+1)
+        C += (n[i]+B)*polygamma(0,n[i]+B+1)
     end
     C -= (N+B*K)*polygamma(0,N+K*B+1)
     return -C/(N+B*K)
