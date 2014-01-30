@@ -12,8 +12,9 @@ d_s_0(B,K) = K*polygamma(1,K*B+1) - polygamma(1,B+1)
 #rho(B,n) = gamma(length(n)*B)/gamma(sum(n)+length(n)*B).*prod(map(x->gamma(x+B)/gamma(B),n))
 #I(B,K,N,n) = rho(B,n)*S1(N,K,n,B)*d_s_0(B,K)
 
-function I{T<:Integer}(B::Real,n::Array{T,1})
-    K = length(n)
+I{T<:Integer}(B::Real,n::Array{T,1}) = I(B,n,length(n))
+
+function I{T<:Integer}(B::Real,n::Array{T,1},K::Integer)
     N = sum(n)
     r = rho(B,n)
     s = s1(n,B)
@@ -21,9 +22,10 @@ function I{T<:Integer}(B::Real,n::Array{T,1})
     return r*s*d
 end
 
-function rho{T<:Integer}(B::Real, n::Array{T,1})
+rho{T<:Integer}(B::Real, n::Array{T,1}) = rho(B,n,length(n))
+
+function rho{T<:Integer}(B::Real, n::Array{T,1},K)
     N = sum(n)
-    K = length(n)
     C1 = GSL.sf_lngamma(B*K) - GSL.sf_lngamma(N+B*K)
     C2 = 0.0
     for i=1:K
@@ -32,9 +34,10 @@ function rho{T<:Integer}(B::Real, n::Array{T,1})
     return exp(C1+C2)
 end
 
-function s1{T<:Integer}(n::Array{T,1},B::Real)
+s1{T<:Integer}(n::Array{T,1},B::Real) = s1(n,B,length(n))
+
+function s1{T<:Integer}(n::Array{T,1},B::Real, K::Integer)
     N = sum(n)
-    K = length(n)
     C = 0.0
     for i=1:K
         C += (n[i]+B)polygamma(0,n[i]+B+1)
@@ -62,11 +65,12 @@ function S1{T<:Integer}(B::Real, n::Array{T,1})
     return C1*C2
 end
 
-getEntropy{T<:Integer}(n::Array{T,1}) = getEntropy(n,1e-7,3.0)
+entropy{T<:Integer}(n::Array{T,1}) = getEntropy(n,1e-7,3.0,length(n))
+entropy{T<:Integer}(n::Array{T,1},bim::Real, bmax::Real) = getEntropy(n,bmin,bmax,length(n))
 
-function getEntropy{T<:Integer}(n::Array{T,1},bmin::Real,bmax::Real)
+function getEntropy{T<:Integer}(n::Array{T,1},bmin::Real,bmax::Real,K::Integer)
     #compute the normalization constant
-    Z = quadgk(x -> rho(x,n)*d_s_0(x,1.0*length(n)),bmin,bmax)
+    Z = quadgk(x -> rho(x,n)*d_s_0(x,K),bmin,bmax)
     #compute the integral over S
     Q = quadgk(x -> I(x,n),bmin,bmax)
     E = Q[1]/Z[1]
