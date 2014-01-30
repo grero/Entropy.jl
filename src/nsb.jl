@@ -57,6 +57,39 @@ function s1{T<:Integer}(n::Array{T,1})
     return -C/(N+K)
 end
 
+function s2{T<:Integer}(n::Array{T,1})
+    N = sum(n)
+    K = length(n)
+    C = 0.0
+    deltapg(k,x,y) = polygamma(k, x) - polygamma(k,y)
+    rr = (N+K)*(N+K+1)
+    for i=1:K
+        C += (n[i]+1)*(n[i] + 2)*(deltapg(0,n[i]+3, N+K+2)^2 + deltapg(1,n[i]+3, N+K+2))/rr
+        for j=1:K
+            if i != j
+                C += (n[i] + 1)*(n[j]+1)*(deltapg(0,n[i] + 2, N+K +2)*deltapg(0,n[j]+1, N+K+2) - polygamma(1,N+K+2))/rr
+            end
+        end
+    end
+    return C
+end
+
+function s2{T<:Integer}(n::Array{T,1},B::Real)
+    N = sum(n)
+    K = length(n)
+    C = 0.0
+    deltapg(k,x,y) = polygamma(k, x) - polygamma(k,y)
+    rr = (N+B*K)*(N+B*K+1)
+    for i=1:K
+        C += (n[i]+B)*(n[i] + B + 1)*(deltapg(0,n[i]+B+2, N+B*K+2)^2 + deltapg(1,n[i]+B+2, N+B*K+2))/rr
+        for j=1:K
+            if i != j
+                C += (n[i]+ B)*(n[j]+B)*(deltapg(0,n[i] +B + 1, N+B*K +2)*deltapg(0,n[j]+B, N+B*K+2) - polygamma(1,N+B*K+2))/rr
+            end
+        end
+    end
+    return C
+end
 
 function S1{T<:Integer}(B::Real, n::Array{T,1})
     C1 = s1(n,B)
