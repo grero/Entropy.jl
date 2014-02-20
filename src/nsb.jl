@@ -1,6 +1,7 @@
 module NSBEntropy
 import GSL
 import Base.Test
+import StatsBase
 using Distributions,Stats
 
 s_0(B,K) = polygamma(0,K*B+1) - polygamma(0,B+1) # <S(n=0)>
