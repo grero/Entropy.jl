@@ -190,6 +190,18 @@ function test_s1()
     Base.Test.@test_approx_eq s 0.45833333333333326
     println("Test passed. s₁ = $s")
 end
+
+function test_simplefunc()
+    srand(1234)
+    n = rand(1:1000,100)
+    q = StatsBase.counts(n,1:1000)
+    s,ds = simplefunc(q)
+    st = log2(1000)
+    Base.Test.@test_approx_eq s 10.65905105740672
+    Base.Test.@test_approx_eq ds 0.2615937290412652
+    println("Test passed. s = $s, ds² = $ds. N/K = 0.1. True entropy: $st")
+end
+
 end
 
 
