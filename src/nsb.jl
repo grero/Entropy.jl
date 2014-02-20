@@ -62,15 +62,18 @@ function saddlepoint{T}(n::Array{T,1}, K::Integer)
 end
 
 rho{T<:Integer}(B::Real, n::Array{T,1}) = rho(B,n,length(n))
+rho{T<:Integer}(B::Real, n::Array{T,1}) = exp(logrho(B,n,length(n)))
 
-function rho{T<:Integer}(B::Real, n::Array{T,1},K)
+logrho{T<:Integer}(B::Real, n::Array{T,1}) = logrho(B, n,length(n))
+
+function logrho{T<:Integer}(B::Real, n::Array{T,1},K::Integer)
     N = sum(n)
     C1 = GSL.sf_lngamma(B*K) - GSL.sf_lngamma(N+B*K)
     C2 = 0.0
     for i=1:K
         C2 += GSL.sf_lngamma(n[i] + B) - GSL.sf_lngamma(B)
     end
-    return exp(C1+C2)
+    return C1+C2
 end
 
 s1{T<:Integer}(n::Array{T,1},B::Real) = s1(n,B,length(n))
