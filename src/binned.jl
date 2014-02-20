@@ -2,7 +2,9 @@ using Stats
 include("nsb.jl")
 
 function entropy{T<:Integer}(x::Array{T,1})
-    P = x/sum(x) #convert to probabilitiy
+    N = sum(x)
+    K = length(x)
+    P = x/N #convert to probabilitiy
     return -dot(P,log2(P + (P.==0)))
 end
 
