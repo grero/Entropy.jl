@@ -1,6 +1,26 @@
 import Distance
 import Base.Test
 
+function entropy{T<:Real}(D::Dict{Int64,Array{T,2}})
+    E = Dict{Int64,Float64}()
+    Et = 0 
+    S = 0
+    Ec = 0 
+    N = length(D)
+    for (k,v) in D
+        n = size(v,2) #get the number of trials
+        ee = entropy(v)
+        E[k] = ee
+        Et += n*ee
+        S += n
+        Ec -= log2(n)
+    end
+    Ec += N*log2(S)
+    Ec /= S
+    Et /= S
+    return Et,Ec,E
+end
+
 function entropy{T<:Real}(x::Array{T,1})
     n = length(x)
     d = zeros(T,n)
