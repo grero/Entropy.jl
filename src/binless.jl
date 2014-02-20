@@ -52,6 +52,7 @@ function entropy{T<:Real}(X::Array{T,2})
     md = minimum(d,2)
     S = spherical_volume(ndims)
     H = (ndims/N)*sum(log2(md)) + log2(S*(N-1)/ndims) + eulergamma/log(2)
+    return H
 end
 
 function spherical_volume(r::Real)
