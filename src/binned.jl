@@ -1,4 +1,5 @@
 using Stats
+include("nsb.jl")
 
 function entropy{T<:Integer}(x::Array{T,1})
     P = x/sum(x) #convert to probabilitiy
