@@ -23,6 +23,44 @@ function I{T<:Integer}(B::Real,n::Array{T,1},K::Integer)
     return r*s*d
 end
 
+function simplefunc{T<:Real}(n::Array{T,1})
+    #gives the entropy, s1 and the variance of the estimate, s2
+    #these are valid up to zeroth order in 1/K and !/N, i.e. for both N and K large
+    N = sum(n)
+    K1 = sum(n.>=1)
+    Delta = N-K1
+    s1 = (eulergamma - log(2)) + 2*log(N) - polygamma(0,Delta)
+    s2 = polygamma(1,Delta)
+    return s1/log(2), s2/log(2)
+end
+    
+
+function saddlepoint{T}(n::Array{T,1}, K::Integer)
+    N = sum(n)
+    K1 = sum(n.>=1)
+    K2 = sum(n.>=2)
+    d = (N - K1)/N #relative number of conincidences
+
+    b_1 =  (N-1)/(2*N)
+    b0 = (-2*N+1)/(3*N)
+    b1 = (N^2 - N - 2)/(9*(N^2 - N))
+
+    k0 = N*(b_1/d + b0 + b1*d)
+    idx = find(n.>1)
+    k1 = 0.0
+    for i=1:length(idx)
+        k1 += (polygamma(0,n[idx[i]]) - polygamma(0,1))/(K1/k0^2 - polygamma(1,k0) + polygamma(1,k0 + N))
+    end
+    k2 = (K1/k0^3 + (polygamma(2,k0) - polygamma(2,k0+N))/2)*k1^2
+    for i=1:length(idx)
+        k2 += k0*(polygamma(1,n[idx[i]]) - polygamma(1,1))
+    end
+    k2 /= (K1/k0^2 - polygamma(1,k0) + polygamma(1,k0 + N))
+    ks = k0 + k1/K + k2/K2
+    println("k₀ = $k0, k₁ = $k1, k₂ = $k2, d = $d, b_1 = $b_1, b0 = $b0, b1 = $b1")
+    return ks/K #return Beta
+end
+
 rho{T<:Integer}(B::Real, n::Array{T,1}) = rho(B,n,length(n))
 
 function rho{T<:Integer}(B::Real, n::Array{T,1},K)
