@@ -1,6 +1,8 @@
 module Histograms
 import StatsBase
 
+export Hist2d 
+
 type Hist1d
     P::Integer
     C::Integer
@@ -8,6 +10,10 @@ type Hist1d
     wordlist::Array{Int32,1}
     wordcnt::Array{Float64,1}
     entropy::Float64
+end
+
+type Hist2d
+    wordcnt::Array{Float64,2}
 end
 
 function hist1d{T<:Integer}(X::Array{T,1})

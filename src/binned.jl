@@ -8,7 +8,8 @@ function entropy{T<:Integer}(x::Array{T,1})
     return -dot(P,log2(P + (P.==0)))
 end
 
-function entropy{T<:Real}(Nc::Array{T,2})
+function entropy(NN::Hist2d)
+    Nc = NN.wordcnt
     N = sum(Nc[:])
     H1 = log2(Nc + (Nc.==0))
     H2 = log2(sum(Nc,1))
