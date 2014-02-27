@@ -2,7 +2,7 @@ module NSBEntropy
 import GSL
 import Base.Test
 import StatsBase
-using Distributions,Stats
+using Distributions,StatsBase
 
 s_0(B,K) = polygamma(0,K*B+1) - polygamma(0,B+1) # <S(n=0)>
 sigma_0(B,K) = (B+1)/(B*K+1)*polygamma(1,B+1) - polygamma(1,B*K+1)
