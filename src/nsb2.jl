@@ -142,6 +142,7 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 			dB0 = -F/dF
 			B0 += dB0
 		end
+		println("B0 = $(B0)")
 
 		if counter > max_counter
 			errcode = 3
@@ -152,7 +153,7 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 		order_K = 4
 		B = zeros(1,order_K)
 
-		EG = polygamma(0,1)
+		EG = -psi(1) 
 		pg1B0 = polygamma(1,B0)
 		pg1NB0 = polygamma(1,N+B0)
 		denum = K1/B0^2 - pg1B0 + pg1NB0
@@ -171,6 +172,8 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 		d1f0 = sum(kxng1.*polygamma(1,nxng1))
 		d2f0 = sum(kxng1.*polygamma(2,nxng1))
 		d3f0 = sum(kxng1.*polygamma(3,nxng1))
+
+		#println("f0 = $f0, d1f0 = $d1f0, d2f0 = $d2f0, d3f0 = $d3f0")
 		
 		B[1] = (B0^2*(EG*K2 + f0)) / (B0^2*denum)
 		B[2] = (K2*pi^2*B0 - (6*K1*B[1]^2)/B0^3 - 3*B[1]^2*pg2B0 +
@@ -187,10 +190,15 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 				(B[1]^4*pg4B0)/ 24 - (B[1]^4*pg4NB0)/24 +  B[2]*d1f0 +
 				B0*B[1]*d2f0 + (B0^3*d3f0)/6)/(-denum)
 
-		Bcl += sum(B.*K.^[1:order_K])
+		Φ = sum(B'.*((K+0.0).^(-[1:order_K])))
+		Bcl += Φ
+		#println("B = $B")
+		#println("Bcl = $Bcl")
+		#println("Φ = $Φ")
+		#ccorrect until here
 
 		counter = 0
-		dBcl = 99999999999
+		dBcl = 999999999999
 		F = 0.0
 		dF = 0.0
 		while ~((abs(dBcl) < abs(Bcl*precision)) | (counter > max_counter))
@@ -198,7 +206,7 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 			F = 1/K*sum(kx[ng1].*polygamma(0,nxng1 + Bcl/K)) - K2/K*psi(1+Bcl/K) + 
 				K1/Bcl + psi(Bcl) - psi(Bcl+N)
 
-			dF =  1/(K^2)*sum(nxng1.*polygamma(1,nxng1 + Bcl/K)) - K2/(K^2)*polygamma(1,1+Bcl/K)
+			dF =  1/(K^2)*sum(kx[ng1].*polygamma(1,nxng1 + Bcl/K)) - K2/(K^2)*polygamma(1,1+Bcl/K)
 					- K1/Bcl^2 + polygamma(1,Bcl) - polygamma(1, Bcl+N)
 
 			dBcl = -F/dF
@@ -209,6 +217,7 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 			end
 			Bcl = Bcl + dBcl
 		end
+		println("Bcl = $Bcl")
 
 		if counter > max_counter
 			errcode = 3
@@ -228,6 +237,7 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 		println(xicl)
 		println(dBcl/dxi_KB(K,Bcl))
 		dxi = 1/sqrt(-dBcl/dxi_KB(K,Bcl)^2)
+		#FIXME: These numbers don't quite match with octave yet
 		
 		return Bcl, xicl, dxi, errcode
 	end
