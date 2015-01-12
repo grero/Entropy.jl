@@ -724,7 +724,7 @@ function integrand_1{T<:Real}(xi::Array{T},nsb_kx_quad::Array{Int64,1}, nsb_nx_q
 end
 
 function integrand_1(xi::Real,S_nsb::NSBEstimate,nsb_mlog_quad::Real)
-	B = B_xiK([xi],S_nsb)
+	B = B_xiK(xi,S_nsb)
 	_mle = mlog_evidence(B,S_nsb)
 	_pxi = prior_xi(xi, S_nsb.K)
 	f = exp( -_mle + nsb_mlog_quad).*_pxi
@@ -745,7 +745,7 @@ function integrand_S{T<:Real}(xi::Array{T},nsb_kx_quad::Array{Int64,1}, nsb_nx_q
 end
 
 function integrand_S(xi::Real,S_nsb::NSBEstimate,nsb_mlog_quad::Real)
-	B = B_xiK([xi], S_nsb.K)
+	B = B_xiK(xi, S_nsb)
 	_mle = mlog_evidence(B,S_nsb)
 	_ms = meanS(B,S_nsb)
 	_pxi = prior_xi(xi, S_nsb.K)
@@ -783,6 +783,13 @@ function B_xiK(K::Int64)
 end
 
 function B_xiK{T<:Real}(xi::Array{T}, S_nsb::NSBEstimate)
+	if isempty(S_nsb.B_interp)
+		S_nsb.B_interp = B_xiK(S_nsb.K)
+	end
+	return B_xiK(S_nsb.B_interp, xi, S_nsb.K)
+end
+
+function B_xiK(xi::Real, S_nsb::NSBEstimate)
 	if isempty(S_nsb.B_interp)
 		S_nsb.B_interp = B_xiK(S_nsb.K)
 	end
@@ -864,7 +871,54 @@ function B_xiK{T<:Real}(Bxi_interp_in::Array{T,2},xi::Array{T}, K::Int64)
 	return B
 end
 
+function B_xiK{T<:Real}(Bxi_interp_in::Array{T,2},xi::Real, K::Int64)
+	max_counter = 200
+	if xi > log(K)
+		ArgumentError("Too large xi -- bigger than log(K)")
+	end
+	if xi < 0 
+		ArgumentError("Too small xi -- smaller than 0")
+	end
+	B = Bxi_interp_in[2,lookup(Bxi_interp_in[1,2:size(Bxi_interp_in,2)-1],xi)+1]
+	dB = 0.0
+	counter = 0
+    F   =  9999999.0
+    dF   =  9999999.0
+	#println(minimum(_xi))
+	qq = abs(xi*1e-13 + 1e-13)
+	qv = xi*1.0e-13
+	while !((abs(F) < qq) || counter > max_counter)
+		counter += 1
+		#F[:] = xi_KB(K,B) -_xi
+		#println(maximum(F))
+		#dF[:] = dxi_KB(K,B)
+		#dB[:] = -F./dF
+		F = xi_KB(K,B) -xi
+		dF = dxi_KB(K,B)
+		dB = abs(F) >= qv ? -F/dF : 0.0
+		#dB[abs(F).<qv] = 0.0
+		B += dB
+	end
+	#println(size(_xi))
+	if counter >= max_counter
+		error("Newton-Raphson root polishing did not converge after $counter iterations. Problems are likely.")
+	end
+
+	if (B > 100*K)&&(xi != log(K))
+		B = (K-1.0)./(2*(log(K) - xi))
+	elseif xi == log(K)
+		B = Inf
+	elseif xi <  (pi*pi*1e-6/6.0)
+		B = (1.0 + 1/(K-1.0))*xi*(6/pi^2)
+	end
+	return B
+end
+
 function lookup{T<:Real}(table::Array{T,2},xi::Array{T})
+	return lookup(table[:],xi)
+end
+
+function lookup{T<:Real}(table::Array{T,2},xi::Real)
 	return lookup(table[:],xi)
 end
 
@@ -873,5 +927,10 @@ function lookup{T<:Real}(table::Array{T,1},xi::Array{T})
 	for i in 1:length(xi)
 		idx[i] = last(searchsorted(table,xi[i]))
 	end
+	return idx
+end
+
+function lookup{T<:Real}(table::Array{T,1},xi::Real)
+	idx = last(searchsorted(table,xi))
 	return idx
 end
