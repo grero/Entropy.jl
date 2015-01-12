@@ -1,28 +1,165 @@
 psi(x) = polygamma(0,x)
 
-function find_nsb_entropy(n::Array{Int64,1}, K::Integer, precision::Real, qfun::Symbol)
-	kx = StatsBase.counts(n, 1:maximum(n))
-	nx = [1:maximum(n)][kx.!=0]
+function find_nsb_entropy(n::Array{Int64,1}, K::Integer, precision::Real;verbose::Int64=0)
 
-	edges =[precision, log(K) - precision]
-	xi_lim = zeros(1,2)
+	k = StatsBase.counts(n, 1:maximum(n))
+	nx = [1:maximum(n)][k.!=0]
+	kx = k[k.>0]
+	return find_nsb_entropy(kx,nx,K,precision;verbose=verbose)
 end
 
-function xi_KB(K::Int64,B::Real)
-	if all(size(K)==size(B)) | length(K) == 1 | length(B) == 1
-		xi = psi(B+1) - psi(1+B./K)
+function find_nsb_entropy(kx::Array{Int64,1}, nx::Array{Int64,1},K::Integer, precision::Real;verbose::Int64=0)
+	integs=  [integrand_1,integrand_S]
+	msgs = ["normalization", "S","S^2"]
+
+	edges =[precision, log(K) - precision]
+	xi_lim = zeros(2)
+	B_cl, xi_cl, dS_cl,errcode = max_evidence(kx, nx, K, precision;verbose=verbose)
+	#println("size(xi_cl) = $(size(xi_cl))")
+	nsb_K_quad = K
+	nsb_kx_quad = kx
+	nsb_nx_quad = nx
+
+	if errcode > 0
+		warn("FIND_ENTROPY: Switching integration over the full range of xi due to prior errors")
+		if B_cl > 0
+			nsb_mlog_quad = mlog_evidence(B_cl, kx, nx, K)
+			S_cl = meanS(B_cl, kx, nx, K)
+		else
+			nsb_mlog = 0.0
+			S_cl = NaN
+		end
+		xi_lim[:] = edges
+		delta = 0.0
+		dS_cl = NaN
+		xi_cl = Inf
 	else
-		ArgumentError("Dimension mismatch")
+		S_cl = meanS(B_cl, kx, nx, K)
+		warn("FIND_NSB_ENTROPY: Expect S to be near $S_cl and σ near $dS_cl")
+		nsb_mlog_quad = mlog_evidence(B_cl, kx, nx, K) #value at the saddle
+		delta = erfinv(1-precision)*sqrt(2)
+		verbose > 0 && println("FIND_NSB_ENTROPY: Integrating around peak")
 	end
-	return xi
+
+	nsb_val_quad = zeros(length(integs),1)
+	ec = zeros(nsb_val_quad)
+	nfun = zeros(nsb_val_quad)
+	err = zeros(nsb_val_quad)
+	for i in 1:length(integs)
+		if delta > 0
+			#println("size(xi_cl) = $(size(xi_cl))")
+			#println("size(nsb_mlog_quad) = $(size(nsb_mlog_quad))")
+			cent = integs[i](xi_cl, nsb_kx_quad, nsb_nx_quad, nsb_K_quad,nsb_mlog_quad[1])
+			good_enough = 0.1*cent*exp(-(delta^2)/2.0)
+			wnd = [-1.0,-1.0]
+			worst = [1.0,2.0]
+			best = [1.0,2.0]
+			limval = good_enough.*ones(2)
+			finished = false
+			while !finished
+				if any(xi_lim[worst].==edges)
+					if any(wnd[best].>10)
+						wnd[best] *= 1.2
+					else
+						wnd[best] += 0.5
+					end
+				else
+					if any(wnd[worst].>10)
+						wnd[worst] *= 1.2
+					else
+						wnd[worst] += 0.5
+					end
+				end
+				xi_lim[1] = max(edges[1],xi_cl - (delta+wnd[1])*dS_cl)[1]
+				xi_lim[2] = min(edges[2],xi_cl + (delta+wnd[2])*dS_cl)[1]
+
+				limval[worst] = integs[i](xi_lim[worst],nsb_kx_quad, nsb_nx_quad, nsb_K_quad, nsb_mlog_quad[1])[1]
+				limval[best] = integs[i](xi_lim[best],nsb_kx_quad, nsb_nx_quad, nsb_K_quad,nsb_mlog_quad[1])[1]
+				tmp,worst = findmax(limval)
+				tmp,best = findmin(limval)
+				#println("best = $best")
+				if all(limval[worst].<good_enough)
+					finished = true
+				end
+				if all(limval[best] .< good_enough) && any(xi_lim[worst].==edges)
+					finished = true
+				end
+				if xi_lim == edges
+					finished = true
+				end
+			end
+		end
+
+		verbose >0 && println("FIND_NSB_ENTROPY: Doing $(msgs[i]) integral. Limits: $(xi_lim[1]) < xi < $(xi_lim[2])")
+
+		_func(x) = integs[i](x, nsb_kx_quad, nsb_nx_quad, nsb_K_quad,nsb_mlog_quad[1])
+		nsb_val_quad[i,:],err[i] = quadgk(_func, xi_lim[1], xi_lim[2];reltol=precision)
+		ec[i] = 0
+		if ec[i] > 0
+			warn("FIND_NSB_ENTROPY: Problem in $(msgs[i]) integral")
+		end
+		if err[i] > precision
+			warn("FIND_NSB_ENTROPY: Precision of $precision required by only $(err[i]) achieved")
+		end
+
+	end
+
+	S_nb  = nsb_val_quad[2]/nsb_val_quad[1]
+	println("S_nb = $S_nb")
+	return nsb_val_quad, err
+end
+
+function meanS{T<:Real}(B::T, kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64)
+	return meanS([B],kx,nx,K)
+end
+
+function meanS{T<:Real}(B::Array{T}, kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64)
+	@assert size(kx) == size(nx) 
+	if any(nx.<=0)
+		ArgumentError("Bins with zero count encountered")
+	end
+	N = sum(kx.*nx)
+	Nf = N + 0.0
+	if N <= 1
+		warn("Too few data samples: N = $N")
+	end
+	K1 = sum(kx)
+	_B = B[:]
+
+	ovrNB = 1./(Nf+_B)
+	osB = ones(size(_B))
+	osn = ones(size(nx))
+	f = zeros(size(_B))
+
+	f = psi(Nf+_B+1.0) - (ovrNB*osn').*(osB*nx' + (_B./K)*osn').*psi(osB*nx' + (_B./K)*osn'+1.0)*kx[:] -
+			_B.*ovrNB*(1.0-K1/K).*psi(1+_B/K)
+	f[!isfinite(_B)] = log(K)
+	f = reshape(f, size(B))
+	f
+end
+
+function xi_KB{T<:Real}(K::Int64, B::T)
+	return psi(B+1) - psi(1+B/K)
+end
+
+
+
+function xi_KB{T<:Real}(K::Int64,B::Array{T})
+	xi = zeros(B)
+	for i in 1:length(xi)
+		xi[i] = psi(B[i]+1) - psi(1+B[i]/K)
+	end
+	#xi = psi(B+1) - psi(1+B./K)
+	xi
 end
 
 function dxi_KB(K::Int64, B::Real)
-	if all(size(K)==size(B)) | length(K) == 1 | length(B) == 1
-		dxi = polygamma(1,B+1) - 1/K.*polygamma(1,1+B./K)
-	else
-		ArgumentError("Dimension mismatch")
-	end
+	dxi = polygamma(1,B+1) - 1/K.*polygamma(1,1+B./K)
+	return dxi
+end
+
+function dxi_KB{T<:Real}(K::Int64, B::Array{T})
+	dxi = polygamma(1,B+1) - 1/K.*polygamma(1,1+B./K)
 	return dxi
 end
 
@@ -65,17 +202,17 @@ function get_coefficients(N::Int64)
         (Nf^2 - N - 2)/(9*(Nf^2 - N)), #b3
 	    (2*(2 - 3*N - 3*Nf^2 + 2*Nf^3))/(135*Nm^2*N), #b4
 	    (4.0*(22.0 + 13.0*N - 12*N2 - 2.0*N3 + N4))/(405.0*Nm3*N), #b5
-	    (4.0*(-40.0 + 58.0*N + 65.0*N2 - 40.0*N3 - 5.0*N4 +	
+	    (4.0*(-40.0 + 58.0*N + 65.0*N2 - 40.0*N3 - 5.0*N4 +
 	      2.0*N5))/(1701.0*Nm4*N), #b6
-	    (4*(-9496 - 6912*N + 5772*Nf^2 + 2251*Nf^3 - 
+	    (4*(-9496 - 6912*N + 5772*Nf^2 + 2251*Nf^3 -
 	      1053*Nf^4 - 87*Nf^5 + 29*Nf^6))/(42525*Nm^5*N), #b7
-	    (16.0*(764.0 - 1030.0*N - 1434.0*Nf^2 + 757.0*Nf^3 + 295.0*Nf^4 
+	    (16.0*(764.0 - 1030.0*N - 1434.0*Nf^2 + 757.0*Nf^3 + 295.0*Nf^4
 	       - 111.0*Nf^5 - 7.0*Nf^6 + 2.0*Nf^7))/(18225.0*Nm^6*N), #b8
-	    (16*(167000 + 142516*N - 108124*Nf^2 - 66284*Nf^3 
-	       + 26921*Nf^4 + 7384*Nf^5 - 2326*Nf^6 - 116*Nf^7 
+	    (16*(167000 + 142516*N - 108124*Nf^2 - 66284*Nf^3
+	       + 26921*Nf^4 + 7384*Nf^5 - 2326*Nf^6 - 116*Nf^7
 	       + 29*Nf^8))/(382725*Nm^7*N), #b9
-	    (16.0*(-17886224.0 + 22513608.0*N + 37376676.0*Nf^2 
-	       - 17041380.0*Nf^3 - 11384883.0*Nf^4 + 3698262.0*Nf^5 
+	    (16.0*(-17886224.0 + 22513608.0*N + 37376676.0*Nf^2
+	       - 17041380.0*Nf^3 - 11384883.0*Nf^4 + 3698262.0*Nf^5
 	       + 846930.0*Nf^6 - 229464.0*Nf^7 - 9387.0*Nf^8 + 2086.0*Nf^9))/
 			(37889775.0*Nm^8*N), #b10
 	    (16.0*(-4166651072.0 - 3997913072.0*Nf + 2783482560.0*Nf^2 +
@@ -84,14 +221,14 @@ function get_coefficients(N::Int64)
 	       + 33079.0*Nf^10))/(795685275.0*Nm^9*N), #b11
 	    (32.0*(52543486208.0 - 62328059360.0*Nf - 118489458160.0*Nf^2 +
 	       47185442088.0*Nf^3 + 44875379190.0*Nf^4 - 12359832987.0*Nf^5 -
-	       5400540075.0*Nf^6 + 1272974916.0*Nf^7 + 200644800.0*Nf^8 - 
+	       5400540075.0*Nf^6 + 1272974916.0*Nf^7 + 200644800.0*Nf^8 -
 	       42495955.0*Nf^9 - 1255067.0*Nf^10 +
 	       228194.0*Nf^11))/(14105329875.0*Nm^10*N)] #b12
    return b
 end
 
 
-function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precision::Real)
+function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precision::Real;verbose::Int64=0)
 	max_counter = 200
 	errcode = 0
 
@@ -102,7 +239,7 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 	if N <= 1
 		ArgumentError("Too few data samples: N = $(N)")
 	end
-	
+
 	ng1 = find(nx.>1)
 	K1 = sum(kx)
 	K2 = sum(kx[ng1])
@@ -124,9 +261,8 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 	else
 		order = 10
 		b = get_coefficients(N)
-		
+
 		B0ep = N*sum(ep.^[-1:order].*b)
-		println("B0ep = $(B0ep)")
 		if B0ep < 0
 			B0ep = precision
 			warn("MAX_EVIDENCE: Series expansion for B_0 did not converge")
@@ -142,7 +278,6 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 			dB0 = -F/dF
 			B0 += dB0
 		end
-		println("B0 = $(B0)")
 
 		if counter > max_counter
 			errcode = 3
@@ -153,7 +288,7 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 		order_K = 4
 		B = zeros(1,order_K)
 
-		EG = -psi(1) 
+		EG = -psi(1)
 		pg1B0 = polygamma(1,B0)
 		pg1NB0 = polygamma(1,N+B0)
 		denum = K1/B0^2 - pg1B0 + pg1NB0
@@ -174,18 +309,18 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 		d3f0 = sum(kxng1.*polygamma(3,nxng1))
 
 		#println("f0 = $f0, d1f0 = $d1f0, d2f0 = $d2f0, d3f0 = $d3f0")
-		
+
 		B[1] = (B0^2*(EG*K2 + f0)) / (B0^2*denum)
 		B[2] = (K2*pi^2*B0 - (6*K1*B[1]^2)/B0^3 - 3*B[1]^2*pg2B0 +
 				3*B[1]^2*pg2NB0 - 6*B0*d1f0)/(-6*denum);
-		B[3] = (K2*pi^2*B[1] + (6*K1*B[1]^3)/B0^4 -(12*K1*B[1]*B[2])/B0^3 + 
-				3*K2*B0^2*pg21 - 6*B[1]*B[2]*pg2B0 + 6*B[1]*B[2]*pg2NB0 - 
+		B[3] = (K2*pi^2*B[1] + (6*K1*B[1]^3)/B0^4 -(12*K1*B[1]*B[2])/B0^3 +
+				3*K2*B0^2*pg21 - 6*B[1]*B[2]*pg2B0 + 6*B[1]*B[2]*pg2NB0 -
 				B[1]^3*pg3B0 + B[1]^3*pg3NB0 - 6*B[1]*d1f0 - 3*B0^2*d2f0)/ (-6*denum)
-		B[4] = -(-(K2*pi^4*B0^3)/90 + (K1*B[1]^4)/B0^5 - (K2*pi^2*B[2])/6 - 
-				(3*K1*B[1]^2*B[2])/B0^4 + (K1*B[2]^2)/B0^3 + 
-				(2*K1*B[1]*B[3])/B0^3 - K2*B0*B[1]*pg21 + ((B[2]^2 + 
-				2*B[1]*B[3])*pg2B0)/2 
-				- ((B[2]^2 + 2*B[1]*B[3])*pg2NB0)/2 + 
+		B[4] = -(-(K2*pi^4*B0^3)/90 + (K1*B[1]^4)/B0^5 - (K2*pi^2*B[2])/6 -
+				(3*K1*B[1]^2*B[2])/B0^4 + (K1*B[2]^2)/B0^3 +
+				(2*K1*B[1]*B[3])/B0^3 - K2*B0*B[1]*pg21 + ((B[2]^2 +
+				2*B[1]*B[3])*pg2B0)/2
+				- ((B[2]^2 + 2*B[1]*B[3])*pg2NB0)/2 +
 				(B[1]^2*B[2]*pg3B0)/2 - (B[1]^2*B[2]*pg3NB0)/2 +
 				(B[1]^4*pg4B0)/ 24 - (B[1]^4*pg4NB0)/24 +  B[2]*d1f0 +
 				B0*B[1]*d2f0 + (B0^3*d3f0)/6)/(-denum)
@@ -201,23 +336,23 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 		dBcl = 999999999999
 		F = 0.0
 		dF = 0.0
-		while ~((abs(dBcl) < abs(Bcl*precision)) | (counter > max_counter))
+		while !((abs(dBcl) < abs(Bcl*precision)) || (counter > max_counter))
 			counter += 1
-			F = 1/K*sum(kx[ng1].*polygamma(0,nxng1 + Bcl/K)) - K2/K*psi(1+Bcl/K) + 
+			F = 1/K*sum(kx[ng1].*psi(nxng1 + Bcl/K)) - K2/K*psi(1+Bcl/K) +
 				K1/Bcl + psi(Bcl) - psi(Bcl+N)
 
-			dF =  1/(K^2)*sum(kx[ng1].*polygamma(1,nxng1 + Bcl/K)) - K2/(K^2)*polygamma(1,1+Bcl/K)
-					- K1/Bcl^2 + polygamma(1,Bcl) - polygamma(1, Bcl+N)
+			dF =  1/(K^2)*sum(kx[ng1].*polygamma(1,nxng1 + Bcl/K)) - K2/(K^2)*polygamma(1,1+Bcl/K) - K1/Bcl^2 + polygamma(1,Bcl) - polygamma(1, Bcl+N)
+			#println("counter = $counter, F = $F, dF = $dF")
 
 			dBcl = -F/dF
 			if dBcl < 0.0
+				warn("MAX_EVIDENCE: negative (unstable) change dBcl = $dBcl")
 				dBcl = 0.0
-				warn("MAX_EVIDENCE: negative (unstable) change")
 				errcode = 4
 			end
 			Bcl = Bcl + dBcl
 		end
-		println("Bcl = $Bcl")
+		#println("Bcl = $Bcl")
 
 		if counter > max_counter
 			errcode = 3
@@ -225,22 +360,199 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 		end
 
 		if errcode == 3 && counter < max_counter
-			println("MAX_EVIDENCE. Recovered from previous error in Bcl determination")
+			verbose > 0 && println("MAX_EVIDENCE. Recovered from previous error in Bcl determination")
 		end
 
-		dBcl = 1/K^2*sum(kxng1.*polygamma(1,nxng1 + Bcl/K)) - 
-				K2/K^2*polygamma(1,1+Bcl/K) - K1/Bcl^2 + polygamma(1,Bcl) - 
+		dBcl = 1/K^2*sum(kxng1.*polygamma(1,nxng1 + Bcl/K)) -
+				K2/K^2*polygamma(1,1+Bcl/K) - K1/Bcl^2 + polygamma(1,Bcl) -
 				polygamma(1,Bcl + N)
 
 
 		xicl = xi_KB(K,Bcl)
-		println(xicl)
-		println(dBcl/dxi_KB(K,Bcl))
-		dxi = 1/sqrt(-dBcl/dxi_KB(K,Bcl)^2)
+		verbose > 0 && println("xicl = $xicl")
+		k = 0
+		verbose > 0 && println("dBcl = $dBcl")
+		#println(K)
+		#FIXME: Why is it complaining about k not being defined here??
+		#println(dxi_KB(K,Bcl))
+		dxi = 1./sqrt(-dBcl./dxi_KB(K,Bcl).^2)
 		#FIXME: These numbers don't quite match with octave yet
-		
+
 		return Bcl, xicl, dxi, errcode
 	end
-
 end
 
+gammaln(x) = log(gamma(x))
+
+mlog_evidence(B::Real, kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64) = mlog_evidence([B],kx,nx,K)
+
+function mlog_evidence{T<:Real}(B::Array{T,1}, kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64)
+	if any(nx.<=0)
+		ArgumentError("Bins with zero count encountered")
+	end
+	N = sum(kx.*nx)
+	if N <= 1
+		ArgumentError("Too few data samples: N = $N")
+	end
+	Nf = N + 0.0
+	_B = B[:]
+	f = zeros(_B)
+	B0 = find(_B.==0)
+	if length(B0) > 0
+		Bn0 = find(_B.!=0)
+		f[Bn0] = mlog_evidence(B[Bn0], kx, nx, K)
+		f[B0] = Inf
+	else
+		ng1 = find(nx.>1)
+		nxng1 = nx[ng1]
+		K1 = sum(kx)
+		K2 = sum(kx[ng1])
+		if length(ng1) > 0 #coincidences
+			f1 = K2*lgamma(1+_B/K)
+			f2 = -lgamma(_B*ones(1,length(ng1)))/K + ones(length(B),1)*nx[ng1]'
+			f3 = f2*kx[ng1]
+			f[:] = f1 .+ f3[:]
+			#for i in 1:length(f)
+			#	f[i] = K2*lgamma(1+_B[i]/K)
+			#	f2 = -lgamma(_B[i])/K
+			#	f1 = 0.0
+		#		f3 = 0.0
+		#		for j1 in 1:length(ng1)
+		#			f1 += nxng1[j1]
+		#			f3 += nxng1[j1]^2
+		#		end
+		#		f[i] += f2*f1 + f3
+		#	end
+		end
+	end
+	#println(f)
+	large = (_B .> max(100,100*N))
+	if any(large) #we have large values
+		nterms = max(ceil(abs(-15 - log10(N))./log10(N./_B[large]))) + 1
+		#println("nterms = $nterms")
+		ifac = 1./cumprod([2:(nterms+1)])
+		for i in nterms:-1:1
+			f[large]  += polygamma(i,_B[large]).*ifrac[i].*Nf^(i+1)
+		end
+	end
+	#println(f)
+
+	other = !large
+	df = -K1*log(_B[other]) + lgamma(_B[other]+N) - lgamma(_B[other])
+	#println(df)
+	f[other] += -K1*log(_B[other]) + lgamma(_B[other]+N) - lgamma(_B[other])
+end
+
+integrand_1{T<:Real}(xi::T,nsb_kx_quad::Array{Int64,1}, nsb_nx_quad::Array{Int64,1}, nsb_K_quad::Int64,nsb_mlog_quad::Real) = integrand_1([xi],nsb_kx_quad, nsb_nx_quad, nsb_K_quad,nsb_mlog_quad)
+
+function integrand_1{T<:Real}(xi::Array{T},nsb_kx_quad::Array{Int64,1}, nsb_nx_quad::Array{Int64,1}, nsb_K_quad::Int64,nsb_mlog_quad::Real)
+	B = B_xiK(xi, nsb_K_quad)
+	_mle = mlog_evidence(B,nsb_kx_quad, nsb_nx_quad, nsb_K_quad)
+	_pxi = prior_xi(xi, nsb_K_quad)
+	f = exp( -_mle + nsb_mlog_quad).*_pxi
+	#println("f = $f")
+	return f
+end
+
+integrand_S{T<:Real}(xi::T,nsb_kx_quad::Array{Int64,1}, nsb_nx_quad::Array{Int64,1}, nsb_K_quad::Int64,nsb_mlog_quad::Real) = integrand_S([xi],nsb_kx_quad, nsb_nx_quad, nsb_K_quad,nsb_mlog_quad)
+
+
+function integrand_S{T<:Real}(xi::Array{T},nsb_kx_quad::Array{Int64,1}, nsb_nx_quad::Array{Int64,1}, nsb_K_quad::Int64,nsb_mlog_quad::Real)
+	B = B_xiK(xi, nsb_K_quad)
+	_mle = mlog_evidence(B,nsb_kx_quad, nsb_nx_quad, nsb_K_quad)
+	_ms = meanS(B,nsb_kx_quad, nsb_nx_quad, nsb_K_quad)
+	_pxi = prior_xi(xi, nsb_K_quad)
+	f = exp( -_mle + nsb_mlog_quad).*_pxi.*_ms
+	return f
+end
+
+function prior_xi{T<:Real}(xi::Array{T}, K::Int64)
+	f = ones(size(xi))
+	return f
+end
+
+function B_xiK{T<:Real}(xi::Array{T}, K::Int64)
+	if any(xi .> log(K))
+		ArgumentError("Too large xi -- bigger than log(K)")
+	end
+	if any(xi .< 0 )
+		ArgumentError("Too small xi -- smaller than 0")
+	end
+	#create the interpolation
+	K_interp_in = K
+	step = 1.0e-2
+	b1 = 10.0
+	b2 = 100.0*K
+	b = zeros(int(b1/step+1 + ceil(log(b2)/step)))
+	b[1:b1/step+1] = 0:step:b1
+	b[b1/step+3:end] = b1*exp([step:step:log(b2)])
+	#b = [0:step:b1,b1*exp([step:step:log(b2)])]
+	Bxi_interp_in = zeros(2,length(b))
+	Bxi_interp_in[1,:] = xi_KB(K,b)
+	Bxi_interp_in[2,:] = b
+	dxi = float([1.0e-3:log(K)*1.0e-3:log(K)-1.0e-3])
+	Bxi_interp_in_new = zeros(2,length(dxi))
+	Bxi_interp_in_new[1,:] = dxi
+	Bxi_interp_in_new[2,:]  = B_xiK(Bxi_interp_in, dxi,K)
+	return B_xiK(Bxi_interp_in_new,xi,K)
+end
+
+function B_xiK{T<:Real}(Bxi_interp_in::Array{T,2},xi::Array{T}, K::Int64)
+	max_counter = 200
+	if maximum(xi) > log(K)
+		ArgumentError("Too large xi -- bigger than log(K)")
+	end
+	if minimum(xi) < 0 
+		ArgumentError("Too small xi -- smaller than 0")
+	end
+	_xi = xi[:]
+	B = Bxi_interp_in[2,lookup(Bxi_interp_in[1,2:size(Bxi_interp_in,2)-1],_xi)+1]
+	B = B[:]
+	dB = zeros(B)
+	counter = 0
+    F   =  9999999.0*ones(_xi)
+    dF   =  9999999.0*ones(_xi)
+	#println(minimum(_xi))
+	qq = abs(_xi*1e-13 + 1e-13)
+	qv = _xi*1.0e-13
+	while !(all(abs(F) .< qq) || counter > max_counter)
+		counter += 1
+		#F[:] = xi_KB(K,B) -_xi
+		#println(maximum(F))
+		#dF[:] = dxi_KB(K,B)
+		#dB[:] = -F./dF
+		for i in 1:length(F)
+			F[i] = xi_KB(K,B[i]) -_xi[i]
+			dF[i] = dxi_KB(K,B[i])
+			dB[i] = abs(F[i]) >= qv[i] ? -F[i]/dF[i] : 0.0
+		end
+		#dB[abs(F).<qv] = 0.0
+		B[:] += dB
+	end
+	#println(size(_xi))
+	if counter >= max_counter
+		error("Newton-Raphson root polishing did not converge after $counter iterations. Problems are likely.")
+	end
+
+	repl_large = ((B.>100*K)&(_xi.!=log(K)))
+	B[repl_large] = (K-1.0)./(2*(log(K) - _xi[repl_large]))
+	B[_xi.==log(K)] = Inf
+
+	repl_small = _xi .<  (pi*pi*1e-6/6.0)
+	B[repl_small] = (1.0 + 1/(K-1.0))*_xi[repl_small]*(6/pi^2)
+
+	B = reshape(B,size(xi))
+	return B
+end
+
+function lookup{T<:Real}(table::Array{T,2},xi::Array{T})
+	return lookup(table[:],xi)
+end
+
+function lookup{T<:Real}(table::Array{T,1},xi::Array{T})
+	idx = zeros(Int64,size(xi))
+	for i in 1:length(xi)
+		idx[i] = last(searchsorted(table,xi[i]))
+	end
+	return idx
+end
