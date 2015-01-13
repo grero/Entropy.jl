@@ -49,6 +49,7 @@ function get_coincidence_count(S::NSBEstimate)
 end
 
 psi(x) = polygamma(0,x)
+psi_asymp(x) = psi(x) - log(x) #FIXME is perhaps not as accurate as we want
 
 function find_nsb_entropy(n::Array{Int64,1}, K::Integer, precision::Real;verbose::Int64=0)
 	S_nsb = NSBEstimate(n,K)
@@ -58,17 +59,19 @@ function find_nsb_entropy(n::Array{Int64,1}, K::Integer, precision::Real;verbose
 	return find_nsb_entropy(S_nsb,precision;verbose=verbose)
 end
 
-function find_nsb_entropy(S_nsb, precision::Real;verbose::Int64=0)
+function find_nsb_entropy(S_nsb::NSBEstimate, precision::Real;verbose::Int64=0)
 	integs=  [integrand_1,integrand_S]
 	msgs = ["normalization", "S","S^2"]
 	K = S_nsb.K
+	nsb_mlog_quad = zeros(1)
 	edges =[precision, log(K) - precision]
 	xi_lim = zeros(2)
 	B_cl, xi_cl, dS_cl,errcode = max_evidence(S_nsb, precision;verbose=verbose)
 	#println("size(xi_cl) = $(size(xi_cl))")
-
+	#println("errocode = $errcode")
 	if errcode > 0
-		warn("FIND_ENTROPY: Switching integration over the full range of xi due to prior errors")
+		verbose > 0 && warn("FIND_ENTROPY: Switching integration over the full range of xi due to prior errors")
+		#println("B_cl = $B_cl")
 		if B_cl > 0
 			nsb_mlog_quad = mlog_evidence(B_cl, S_nsb)
 			S_cl = meanS(B_cl, S_nsb)
@@ -82,7 +85,8 @@ function find_nsb_entropy(S_nsb, precision::Real;verbose::Int64=0)
 		xi_cl = Inf
 	else
 		S_cl = meanS(B_cl, S_nsb)
-		warn("FIND_NSB_ENTROPY: Expect S to be near $S_cl and σ near $dS_cl")
+		verbose > 0 && warn("FIND_NSB_ENTROPY: Expect S to be near $S_cl and σ near $dS_cl")
+		#println("B_cl = $B_cl")
 		nsb_mlog_quad = mlog_evidence(B_cl, S_nsb) #value at the saddle
 		delta = erfinv(1-precision)*sqrt(2)
 		verbose > 0 && println("FIND_NSB_ENTROPY: Integrating around peak")
@@ -119,6 +123,11 @@ function find_nsb_entropy(S_nsb, precision::Real;verbose::Int64=0)
 				end
 				xi_lim[1] = max(edges[1],xi_cl - (delta+wnd[1])*dS_cl)[1]
 				xi_lim[2] = min(edges[2],xi_cl + (delta+wnd[2])*dS_cl)[1]
+				#println("xi_lim = $xi_lim")
+				#println("limval = $limval")
+				#println("dS_cl = $dS_cl")
+				#println("delta = $delta")
+				#println("nsb_mlog_quad = $nsb_mlog_quad")
 
 				for j in 1:length(worst)
 					limval[worst[j]] = integs[i](xi_lim[worst[j]],S_nsb, nsb_mlog_quad[1])[1]
@@ -129,10 +138,10 @@ function find_nsb_entropy(S_nsb, precision::Real;verbose::Int64=0)
 				tmp,worst = findmax(limval)
 				tmp,best = findmin(limval)
 				#println("best = $best")
-				if all(limval[worst].<good_enough)
+				if any(limval[worst].<good_enough)
 					finished = true
 				end
-				if all(limval[best] .< good_enough) && any(xi_lim[worst].==edges)
+				if any(limval[best] .< good_enough) && any(xi_lim[worst].==edges)
 					finished = true
 				end
 				if xi_lim == edges
@@ -147,16 +156,16 @@ function find_nsb_entropy(S_nsb, precision::Real;verbose::Int64=0)
 		nsb_val_quad[i,:],err[i] = quadgk(_func, xi_lim[1], xi_lim[2];reltol=precision)
 		ec[i] = 0
 		if ec[i] > 0
-			warn("FIND_NSB_ENTROPY: Problem in $(msgs[i]) integral")
+			verbose > 0 && warn("FIND_NSB_ENTROPY: Problem in $(msgs[i]) integral")
 		end
 		if err[i] > precision
-			warn("FIND_NSB_ENTROPY: Precision of $precision required by only $(err[i]) achieved")
+			verbose > 0 && warn("FIND_NSB_ENTROPY: Precision of $precision required by only $(err[i]) achieved")
 		end
 
 	end
 
 	S_nb  = nsb_val_quad[2]/nsb_val_quad[1]
-	println("S_nb = $S_nb")
+	#println("S_nb = $S_nb")
 	S_nsb.S_nsb = S_nb
 	return nsb_val_quad, err
 end
@@ -173,7 +182,7 @@ function meanS{T<:Real}(B::Array{T}, kx::Array{Int64,1}, nx::Array{Int64,1}, K::
 	N = sum(kx.*nx)
 	Nf = N + 0.0
 	if N <= 1
-		warn("Too few data samples: N = $N")
+		verbose > 0 && warn("Too few data samples: N = $N")
 	end
 	K1 = sum(kx)
 	_B = B[:]
@@ -330,13 +339,13 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 		xicl = Inf
 		errcode = 1
 		dxi = NaN
-		warn("MAX_EVIDENCE: No coincidence")
+		verbose > 0 && warn("MAX_EVIDENCE: No coincidence")
 	elseif K1 <= 1
 		Bcl = 0.0
 		xicl = 0
 		errcode = 2
 		dxi = NaN
-		warn("MAX EVIDENCE: All data coincidence")
+		verbose >0 && warn("MAX EVIDENCE: All data coincidence")
 	else
 		order = 10
 		b = get_coefficients(N)
@@ -344,7 +353,7 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 		B0ep = N*sum(ep.^[-1:order].*b)
 		if B0ep < 0
 			B0ep = precision
-			warn("MAX_EVIDENCE: Series expansion for B_0 did not converge")
+			verbose > 0 && warn("MAX_EVIDENCE: Series expansion for B_0 did not converge")
 		end
 
 		B0 = B0ep
@@ -360,7 +369,7 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 
 		if counter > max_counter
 			errcode = 3
-			warn("MAX_EVIDENCE: Newton-Rhapson search for B_0 did not converge after $counter iterations")
+			verbose > 0 && warn("MAX_EVIDENCE: Newton-Rhapson search for B_0 did not converge after $counter iterations")
 		end
 
 		Bcl = B0
@@ -425,7 +434,7 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 
 			dBcl = -F/dF
 			if dBcl < 0.0
-				warn("MAX_EVIDENCE: negative (unstable) change dBcl = $dBcl")
+				verbose > 0 && warn("MAX_EVIDENCE: negative (unstable) change dBcl = $dBcl")
 				dBcl = 0.0
 				errcode = 4
 			end
@@ -435,7 +444,7 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 
 		if counter > max_counter
 			errcode = 3
-			warn("Newton-Raphson search for Bcl did not converge after $counter iterations")
+			verbose > 0 && warn("Newton-Raphson search for Bcl did not converge after $counter iterations")
 		end
 
 		if errcode == 3 && counter < max_counter
@@ -452,7 +461,6 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 		k = 0
 		verbose > 0 && println("dBcl = $dBcl")
 		#println(K)
-		#FIXME: Why is it complaining about k not being defined here??
 		#println(dxi_KB(K,Bcl))
 		dxi = 1./sqrt(-dBcl./dxi_KB(K,Bcl).^2)
 		#FIXME: These numbers don't quite match with octave yet
@@ -479,13 +487,13 @@ function max_evidence(S_est::NSBEstimate, precision::Real;verbose::Int64=0)
 		xicl = Inf
 		errcode = 1
 		dxi = NaN
-		warn("MAX_EVIDENCE: No coincidence")
+		verbose > 0 && warn("MAX_EVIDENCE: No coincidence")
 	elseif K1 <= 1
 		Bcl = 0.0
 		xicl = 0
 		errcode = 2
 		dxi = NaN
-		warn("MAX EVIDENCE: All data coincidence")
+		verbose > 0 && warn("MAX EVIDENCE: All data coincidence")
 	else
 		order = 10
 		b = get_coefficients(N)
@@ -493,7 +501,7 @@ function max_evidence(S_est::NSBEstimate, precision::Real;verbose::Int64=0)
 		B0ep = N*sum(ep.^[-1:order].*b)
 		if B0ep < 0
 			B0ep = precision
-			warn("MAX_EVIDENCE: Series expansion for B_0 did not converge")
+			verbose > 0 && warn("MAX_EVIDENCE: Series expansion for B_0 did not converge")
 		end
 
 		B0 = B0ep
@@ -509,7 +517,7 @@ function max_evidence(S_est::NSBEstimate, precision::Real;verbose::Int64=0)
 
 		if counter > max_counter
 			errcode = 3
-			warn("MAX_EVIDENCE: Newton-Rhapson search for B_0 did not converge after $counter iterations")
+			verbose >0 && warn("MAX_EVIDENCE: Newton-Rhapson search for B_0 did not converge after $counter iterations")
 		end
 
 		Bcl = B0
@@ -524,9 +532,9 @@ function max_evidence(S_est::NSBEstimate, precision::Real;verbose::Int64=0)
 		pg2NB0 = polygamma(2,N+B0)
 		pg21 = polygamma(2,1)
 		pg3B0 = polygamma(3,B0)
-		pg3NB0 = polygamma(4,N+B0)
+		pg3NB0 = polygamma(3,N+B0)
 		pg4B0 = polygamma(4,B0)
-		pg4NB0 = polygamma(3,N+B0)
+		pg4NB0 = polygamma(4,N+B0)
 
 		nxng1 = S_est.nc
 		kxng1 = S_est.kc
@@ -556,6 +564,7 @@ function max_evidence(S_est::NSBEstimate, precision::Real;verbose::Int64=0)
 		Φ = sum(B'.*((K+0.0).^(-[1:order_K])))
 		Bcl += Φ
 		#println("B = $B")
+		#println("B0 = $B0") #correct
 		#println("Bcl = $Bcl")
 		#println("Φ = $Φ")
 		#ccorrect until here
@@ -574,7 +583,7 @@ function max_evidence(S_est::NSBEstimate, precision::Real;verbose::Int64=0)
 
 			dBcl = -F/dF
 			if dBcl < 0.0
-				warn("MAX_EVIDENCE: negative (unstable) change dBcl = $dBcl")
+				verbose > 0 && warn("MAX_EVIDENCE: negative (unstable) change dBcl = $dBcl")
 				dBcl = 0.0
 				errcode = 4
 			end
@@ -584,11 +593,12 @@ function max_evidence(S_est::NSBEstimate, precision::Real;verbose::Int64=0)
 
 		if counter > max_counter
 			errcode = 3
-			warn("Newton-Raphson search for Bcl did not converge after $counter iterations")
+			verbose > 0 && warn("Newton-Raphson search for Bcl did not converge after $counter iterations")
 		end
 
 		if errcode == 3 && counter < max_counter
 			verbose > 0 && println("MAX_EVIDENCE. Recovered from previous error in Bcl determination")
+			errcode = 0
 		end
 
 		dBcl = 1/K^2*sum(kxng1.*polygamma(1,nxng1 + Bcl/K)) -
@@ -598,13 +608,17 @@ function max_evidence(S_est::NSBEstimate, precision::Real;verbose::Int64=0)
 
 		xicl = xi_KB(K,Bcl)
 		verbose > 0 && println("xicl = $xicl")
-		k = 0
 		verbose > 0 && println("dBcl = $dBcl")
 		#println(K)
-		#FIXME: Why is it complaining about k not being defined here??
 		#println(dxi_KB(K,Bcl))
-		dxi = 1./sqrt(-dBcl./dxi_KB(K,Bcl).^2)
+		#println("Bcl = $Bcl")
+		if errcode > 0
+			dxi = 0.0
+		else
+			dxi = 1./sqrt(-dBcl./dxi_KB(K,Bcl).^2)
+		end
 		#FIXME: These numbers don't quite match with octave yet
+		#println("dxi = $dxi")
 
 		return Bcl, xicl, dxi, errcode
 	end
@@ -692,23 +706,34 @@ function mlog_evidence(B::Real, S_nsb::NSBEstimate)
 		K1 = S_nsb.K1
 		K2 = S_nsb.K2
 		if length(nxng1) > 0 #coincidences
-			f1 = K2*lgamma(1+B/K)
-			f2 = -lgamma(B)/K + nxng1
+			f1 = K2*lgamma(1.0+B/K)
+			f2 = -lgamma(B/K + nxng1)
 			f3 = f2'*kxng1
+			#println("f1 = $f1")
+			#println("f2 = $f2")
+			#println("f3 = $f3")
 			f = (f1 .+ f3[:])[1]
 		end
 	end
-	if B .> max(100,100*N)
-		nterms = max(ceil(abs(-15 - log10(N))./log10(N./B))) + 1
+	#println("f = $f")
+	#println("MLOG_EVIDENCE: f = $f")
+	if B > max(100,100*N)
+		nterms = int(ceil(abs((-15.0 - log10(N))./log10(N./B))))
+		#println("nterms = $nterms")
 		ifac = 1./cumprod([2:(nterms+1)])
+		#println("ifac = $ifac")
 		for i in nterms:-1:1
-			f += polygamma(i,B).*ifrac[i].*Nf^(i+1)
+			f += polygamma(i,B).*ifac[i].*Nf^(i+1)
+			#println("f = $f")
 		end
+		f += (N-K1)*log(B) + psi_asymp(B)*N
+		#println("f = $f")
 	else
 	#println(f)
-		df = -K1*log(B) + lgamma(B+N) - lgamma(B)
+		#df = -K1*log(B) + lgamma(B+N) - lgamma(B)
 		f += -K1*log(B) + lgamma(B+N) - lgamma(B)
 	end
+	#println("f = $f")
 	return f
 end
 
