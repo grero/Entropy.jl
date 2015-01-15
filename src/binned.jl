@@ -1,5 +1,5 @@
 using StatsBase
-include("nsb.jl")
+import StatsBase.entropy
 
 function entropy{T<:Integer}(x::Array{T,1})
     N = sum(x)
