@@ -1,4 +1,4 @@
-type NSBEstimate
+type NSBEntropy
 	N::Int64
 	K::Int64
 	nx::Array{Int64,1} #unique counts
@@ -13,7 +13,7 @@ type NSBEstimate
 	S_ml::Float64 #maximum likelihood estimator
 end
 
-function NSBEstimate()
+function NSBEntropy()
 	K = 0
 	nx = Array(Int64,0)
 	kx = Array(Int64,0)
@@ -25,7 +25,7 @@ function NSBEstimate()
 	S_ml = 0.0
 end
 
-function NSBEstimate(n::Array{Int64,1},K::Int64)
+function NSBEntropy(n::Array{Int64,1},K::Int64)
 	k = StatsBase.counts(n, 1:maximum(n))
 	nx = [1:maximum(n)][k.!=0]
 	kx = k[k.>0]
@@ -35,11 +35,55 @@ function NSBEstimate(n::Array{Int64,1},K::Int64)
 	N = sum(nx.*kx)
 	K1 = sum(kx)
 	K2 = sum(kc)
-	return NSBEstimate(N,K,nx,kx,nc,kc,K1, K2, Float64[], 0.0, 0.0, 0.0)
+	return NSBEntropy(N,K,nx,kx,nc,kc,K1, K2, Float64[], 0.0, 0.0, 0.0)
+end
+
+function NSBEntropy(nx::Array{Int64,1},kx::Array{Int64,1}, K::Int64)
+	idx = nx .> 1
+	nc = nx[idx]
+	kc = kx[idx]
+	N = sum(nx.*kx)
+	K1 = sum(kx)
+	K2 = sum(kc)
+	return NSBEntropy(N,K,nx,kx,nc,kc,K1, K2, Float64[], 0.0, 0.0, 0.0)
 end
 
 
-function get_coincidence_count(S::NSBEstimate)
+function nsb_entropy(n::Array{Int64,1},K::Int64;precision::Real=1e-5)
+	S_nsb = NSBEntropy(n,K)
+	find_nsb_entropy(S_nsb,precision)
+	return S_nsb.S_nsb, S_nsb.dS_nsb
+end
+
+function nsb_entropy(X::Dict{Int64,Int64})
+	n = collect(values(X))
+	K = maximum(keys(X))
+	return nsb_entropy(n,K)
+end
+
+function nsb_entropy(X::Dict{Int64,Dict{Int64,Int64}})
+    E = 0
+    N = 0
+    for (k,v) in X
+        ee,n = nsb_entropy(v)
+        E += ee*n
+        N += n
+    end
+    return E/N,N
+end
+
+function nsb_entropy(X::Dict{Int64, Dict{Int64, Dict{Int64,Int64}}})
+    E = 0
+    N = 0
+    for (k,v) in X
+        ee,n = nsb_entropy(v)
+        E += ee*n
+        N += n
+    end
+    return E/N,N
+end
+
+function get_coincidence_count(S::NSBEntropy)
 	if isempty(S.nc)
 		idx = S.nx .> 1
 		S.nc = S.nx[idx]
@@ -52,15 +96,15 @@ psi(x) = polygamma(0,x)
 psi_asymp(x) = psi(x) - log(x) #FIXME is perhaps not as accurate as we want
 
 function find_nsb_entropy(n::Array{Int64,1}, K::Integer, precision::Real;verbose::Int64=0)
-	S_nsb = NSBEstimate(n,K)
+	S_nsb = NSBEntropy(n,K)
 	k = StatsBase.counts(n, 1:maximum(n))
 	nx = [1:maximum(n)][k.!=0]
 	kx = k[k.>0]
 	return find_nsb_entropy(S_nsb,precision;verbose=verbose)
 end
 
-function find_nsb_entropy(S_nsb::NSBEstimate, precision::Real;verbose::Int64=0)
-	integs=  [integrand_1,integrand_S]
+function find_nsb_entropy(S_nsb::NSBEntropy, precision::Real;verbose::Int64=0)
+	integs=  [integrand_1,integrand_S,integrand_S2]
 	msgs = ["normalization", "S","S^2"]
 	K = S_nsb.K
 	nsb_mlog_quad = zeros(1)
@@ -167,7 +211,8 @@ function find_nsb_entropy(S_nsb::NSBEstimate, precision::Real;verbose::Int64=0)
 	S_nb  = nsb_val_quad[2]/nsb_val_quad[1]
 	#println("S_nb = $S_nb")
 	S_nsb.S_nsb = S_nb
-	return nsb_val_quad, err
+	S_nsb.dS_nsb = sqrt(abs(nsb_val_quad[3]/nsb_val_quad[1] - S_nb^2))
+	return S_nsb,err
 end
 
 function meanS{T<:Real}(B::T, kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64)
@@ -199,7 +244,7 @@ function meanS{T<:Real}(B::Array{T}, kx::Array{Int64,1}, nx::Array{Int64,1}, K::
 	f
 end
 
-function meanS{T<:Real}(B::Array{T,1}, S_nsb::NSBEstimate)
+function meanS{T<:Real}(B::Array{T,1}, S_nsb::NSBEntropy)
 	f = zeros(B)
 	for i in 1:length(f)
 		f[i] = meanS(B[i],S_nsb)
@@ -207,12 +252,12 @@ function meanS{T<:Real}(B::Array{T,1}, S_nsb::NSBEstimate)
 	f
 end
 
-function meanS(B::Real, S_nsb::NSBEstimate)
+function meanS(B::Real, S_nsb::NSBEntropy)
 	N = S_nsb.N
 	Nf = N + 0.0
 	K = S_nsb.K
 	if !isfinite(B)
-		return logK
+		return log(K)
 	end
 	K1 = S_nsb.K1
 	nx = S_nsb.nx
@@ -464,12 +509,11 @@ function max_evidence(kx::Array{Int64,1}, nx::Array{Int64,1}, K::Int64, precisio
 		#println(dxi_KB(K,Bcl))
 		dxi = 1./sqrt(-dBcl./dxi_KB(K,Bcl).^2)
 		#FIXME: These numbers don't quite match with octave yet
-
-		return Bcl, xicl, dxi, errcode
 	end
+	return Bcl, xicl, dxi, errcode
 end
 
-function max_evidence(S_est::NSBEstimate, precision::Real;verbose::Int64=0)
+function max_evidence(S_est::NSBEntropy, precision::Real;verbose::Int64=0)
 	max_counter = 200
 	errcode = 0
 
@@ -620,8 +664,8 @@ function max_evidence(S_est::NSBEstimate, precision::Real;verbose::Int64=0)
 		#FIXME: These numbers don't quite match with octave yet
 		#println("dxi = $dxi")
 
-		return Bcl, xicl, dxi, errcode
 	end
+	return Bcl, xicl, dxi, errcode
 end
 
 gammaln(x) = log(gamma(x))
@@ -685,7 +729,7 @@ function mlog_evidence{T<:Real}(B::Array{T,1}, kx::Array{Int64,1}, nx::Array{Int
 	f[other] += -K1*log(_B[other]) + lgamma(_B[other]+N) - lgamma(_B[other])
 end
 
-function mlog_evidence{T<:Real}(B::Array{T,1}, S_nsb::NSBEstimate)
+function mlog_evidence{T<:Real}(B::Array{T,1}, S_nsb::NSBEntropy)
 	f = zeros(size(B))
 	for i in 1:length(f)
 		f[i] = mlog_evidence(B[i],S_nsb)
@@ -693,7 +737,7 @@ function mlog_evidence{T<:Real}(B::Array{T,1}, S_nsb::NSBEstimate)
 	return f
 end
 
-function mlog_evidence(B::Real, S_nsb::NSBEstimate)
+function mlog_evidence(B::Real, S_nsb::NSBEntropy)
 	N = S_nsb.N
 	Nf = N + 0.0
 	f = 0.0
@@ -748,12 +792,14 @@ function integrand_1{T<:Real}(xi::Array{T},nsb_kx_quad::Array{Int64,1}, nsb_nx_q
 	return f
 end
 
-function integrand_1(xi::Real,S_nsb::NSBEstimate,nsb_mlog_quad::Real)
+function integrand_1(xi::Real,S_nsb::NSBEntropy,nsb_mlog_quad::Real)
 	B = B_xiK(xi,S_nsb)
 	_mle = mlog_evidence(B,S_nsb)
 	_pxi = prior_xi(xi, S_nsb.K)
 	f = exp( -_mle + nsb_mlog_quad).*_pxi
 	#println("f = $f")
+	#println("_mle = $_mle")
+	#println("nsb_mlog_quad = $nsb_mlog_quad")
 	return f
 end
 
@@ -769,12 +815,51 @@ function integrand_S{T<:Real}(xi::Array{T},nsb_kx_quad::Array{Int64,1}, nsb_nx_q
 	return f
 end
 
-function integrand_S(xi::Real,S_nsb::NSBEstimate,nsb_mlog_quad::Real)
+function integrand_S(xi::Real,S_nsb::NSBEntropy,nsb_mlog_quad::Real)
 	B = B_xiK(xi, S_nsb)
 	_mle = mlog_evidence(B,S_nsb)
 	_ms = meanS(B,S_nsb)
 	_pxi = prior_xi(xi, S_nsb.K)
 	f = exp( -_mle + nsb_mlog_quad).*_pxi.*_ms
+	return f
+end
+
+function integrand_S2(xi::Real,S_nsb::NSBEntropy,nsb_mlog_quad::Real)
+	B = B_xiK(xi, S_nsb)
+	_mle = mlog_evidence(B,S_nsb)
+	_ms2 = meanS2(B,S_nsb)
+	_pxi = prior_xi(xi, S_nsb.K)
+	f = exp( -_mle + nsb_mlog_quad).*_pxi.*_ms2
+	return f
+end
+
+function meanS2(B::Real, S_nsb::NSBEntropy)
+
+	N = S_nsb.N
+	K = S_nsb.K
+	K1 = S_nsb.K1
+	nx = S_nsb.nx
+	kx = S_nsb.kx
+	b = B/K
+	nxb = nx + b
+	pnxb1 = psi(nxb+1.0)
+	p0NB2 = psi(N + B + 2.0)
+	p1NB2 = polygamma(1,N+B+2.0)
+
+	f = sum(nxb.*((pnxb1-p0NB2).*kx)*(nxb.*(pnxb1-p0NB2).*kx)' - sum((nxb.*kx).*(nxb.*kx))*p1NB2)
+	f += sum(2*B*(1-K1/K)*nxb.*((pnxb1-p0NB2).*(psi(b+1)-p0NB2) - p1NB2).*kx)
+	f += (1-K1/K)*(1-(K1+1)/K)*B*B*((psi(b+1) - p0NB2)^2-p1NB2)
+	f += -sum((nxb.*(pnxb1 - p0NB2)).^2.*kx) + sum(nxb.*nxb.*kx)*p1NB2
+
+	f += sum((nxb.*(nxb+1).*((psi(nxb+2) - p0NB2).^2 + polygamma(1,nxb+2) - p1NB2)).*kx)
+
+	f += B*(1-K1/K)*(1+b)*((psi(2+b) - p0NB2).^2 + polygamma(1,b+2) - p1NB2)
+
+	#normalizing
+	f = f/((N+B)*(N+B+1))
+	if !isfinite(f)
+		f = log(K)^2
+	end
 	return f
 end
 
@@ -807,14 +892,14 @@ function B_xiK(K::Int64)
 	return Bxi_interp_in_new
 end
 
-function B_xiK{T<:Real}(xi::Array{T}, S_nsb::NSBEstimate)
+function B_xiK{T<:Real}(xi::Array{T}, S_nsb::NSBEntropy)
 	if isempty(S_nsb.B_interp)
 		S_nsb.B_interp = B_xiK(S_nsb.K)
 	end
 	return B_xiK(S_nsb.B_interp, xi, S_nsb.K)
 end
 
-function B_xiK(xi::Real, S_nsb::NSBEstimate)
+function B_xiK(xi::Real, S_nsb::NSBEntropy)
 	if isempty(S_nsb.B_interp)
 		S_nsb.B_interp = B_xiK(S_nsb.K)
 	end
