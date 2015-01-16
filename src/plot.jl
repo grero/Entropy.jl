@@ -1,5 +1,19 @@
 using Winston
 import Winston.plot
+import Visualizer.visualize
+
+function visualize{T<:String}(::Type{GroupedTemporalEntropy}, fnames::Array{T,1})
+	GTE = GroupedTemporalEntropy(fnames[1])
+	ta = plot(GTE)
+
+	function func3(ta,Q,i)
+		if i > 0 && i <= length(Q)
+			GTE = GroupedTemporalEntropy(Q[i])
+			plot(ta, GTE)
+		end
+	end
+	visualize(fnames,800,600,"Grouped Temporal Entropy", func3, ta)
+end
 
 function plot(H::GroupedTemporalEntropy)
 	nrows = int(ceil(sqrt(maximum(H.group_labels))))
