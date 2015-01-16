@@ -25,7 +25,7 @@ function plot(H::GroupedTemporalEntropy)
 		   if (l in H.group_labels) || (i==div(ncols,2)+1) && (j==div(nrows,2)+1)
 				ta[j,i] = Winston.FramedPlot()
 			else
-			    println("Skipping $l")
+			    #println("Skipping $l")
 			end
 		end
 	end
@@ -46,7 +46,7 @@ function plot(ta::Winston.Table,H::GroupedTemporalEntropy)
 		for j=1:nrows
 		   l = ((i-1)*nrows+j)
 			if !(l in H.group_labels)
-			    println("Skipping $l")
+			    #println("Skipping $l")
 				continue
 			end
 			idx = find(H.group_labels.==l)
