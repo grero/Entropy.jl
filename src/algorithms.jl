@@ -95,3 +95,41 @@ function GroupedTemporalEntropy(N::Array{Int64,2}, bins::Array{Float64,1}, trial
 	end
 	return GroupedTemporalEntropy(Hc,dHc,H,dH,bins,word_size, ulabels,trials_per_label)
 end
+
+function GroupedCountEntropy(N::Array{Int64,2}, bins::Array{Float64,1}, trial_labels::Array{Int64,1},word_size::Integer)
+	ntrials = size(N,2)
+	ulabels = sort(unique(trial_labels))
+	nlabels = length(ulabels)
+	H = NaN*zeros(size(N,1)-word_size)
+	dH = NaN*zeros(size(N,1)-word_size)
+	Hc = NaN*zeros(size(N,1)-word_size,nlabels)
+	dHc = NaN*zeros(size(N,1)-word_size,nlabels)
+	trials_per_label = zeros(Int64,nlabels)
+	for (k,l) in enumerate(ulabels)
+		trials_per_label[k] = sum(trial_labels.==l)
+	end
+	y = zeros(Int64,ntrials)
+	for i=1:size(N,1)-word_size
+		fill!(y,0)
+		for j=1:ntrials
+			for k=1:word_size
+				y[j] += N[i+k-1,j]
+			end
+		end
+		n = Entropy.counts(y)
+		H[i],dH[i] = Entropy.nsb_entropy(n,maximum(y))
+		H[i] /= log(2)
+		dH[i] /= log(2)
+		for (k,l) in enumerate(ulabels)
+			n = Entropy.counts(y[trial_labels.==l])
+			try
+				Hc[i,k],dHc[i,k] = Entropy.nsb_entropy(n,maximum(y))
+				Hc[i,k] /= log(2)
+				dHc[i,k] /= log(2)
+			catch ee
+				println("Problem computing entropy for bin $i location $l")
+			end
+		end
+	end
+	return GroupedCountEntropy(Hc,dHc,H,dH,bins,word_size, ulabels,trials_per_label)
+end
