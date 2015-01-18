@@ -1,5 +1,6 @@
 
 abstract ShannonEntropy
+abstract GroupedShannonEntropy <: ShannonEntropy
 abstract Hist
 
 type Hist1d <: Hist
@@ -41,7 +42,7 @@ type TemporalEntropy <: ShannonEntropy
 	word_size::Integer
 end
 
-type GroupedTemporalEntropy <: ShannonEntropy
+type GroupedTemporalEntropy <: GroupedShannonEntropy
 	Hc::Array{Float64,2}
 	dHc::Array{Float64,2}
 	H::Array{Float64,1}
@@ -53,6 +54,20 @@ type GroupedTemporalEntropy <: ShannonEntropy
 	group_labels::Array{Int64,1}
 	trials_per_group::Array{Int64,1}
 end
+type GroupedCountEntropy <: GroupedShannonEntropy
+	Hc::Array{Float64,2}
+	dHc::Array{Float64,2}
+	H::Array{Float64,1}
+	dH::Array{Float64,1}
+	I::Array{Float64,1}
+	dI::Array{Float64,1}
+	bins::Array{Float64,1}
+	word_size::Integer
+	group_labels::Array{Int64,1}
+	trials_per_group::Array{Int64,1}
+end
+
+
 
 function GroupedTemporalEntropy(Hc::Array{Float64,2}, dHc::Array{Float64,2},H::Array{Float64,1},dH::Array{Float64,1}, bins::Array{Float64,1}, word_size::Integer, group_labels::Array{Int64,1},trials_per_group::Array{Int64,1})
 	ps = trials_per_group/sum(trials_per_group)
@@ -72,6 +87,26 @@ end
 function GroupedTemporalEntropy(fname::String)
 	GTE = JLD.load(fname,"GTE")
 	return GTE
+end
+
+function GroupedCountEntropy(fname::String)
+	GCE = JLD.load(fname,"GCE")
+	return GCE
+end
+
+function GroupedCountEntropy(Hc::Array{Float64,2}, dHc::Array{Float64,2},H::Array{Float64,1},dH::Array{Float64,1}, bins::Array{Float64,1}, word_size::Integer, group_labels::Array{Int64,1},trials_per_group::Array{Int64,1})
+	ps = trials_per_group/sum(trials_per_group)
+	_hc = zeros(size(Hc,1))
+	_dhc = zeros(size(Hc,1))
+	for i=1:size(Hc,2)
+		for j=1:size(Hc,1)
+			_hc[j] += ps[i]*Hc[j,i]
+			_dhc[j] += ps[i]*dHc[j,i]*dHc[j,i] #variance
+		end
+	end
+	I = H - _hc
+	dI = sqrt(dH.*dH + _dhc)
+	return GroupedCountEntropy(Hc,dHc,H,dH,I,dI,bins,word_size,group_labels,trials_per_group)
 end
 
 
