@@ -79,18 +79,18 @@ function GroupedTemporalEntropy(N::Array{Int64,2}, bins::Array{Float64,1}, trial
 	for i=1:size(N,1)-word_size
 		y = Entropy.hash(N[i:i+word_size-1,:])
 		n = Entropy.counts(y)
-		H[i],dH[i] = Entropy.nsb_entropy(n,maximum(y))
-		H[i] /= log(2)
-		dH[i] /= log(2)
-		for (k,l) in enumerate(ulabels)
-			n = Entropy.counts(y[trial_labels.==l])
-			try
-				Hc[i,k],dHc[i,k] = Entropy.nsb_entropy(n,maximum(y))
-				Hc[i,k] /= log(2)
-				dHc[i,k] /= log(2)
-			catch ee
-				println("Problem computing entropy for bin $i location $l")
+		try
+			H[i],dH[i] = Entropy.nsb_entropy(n,maximum(y))
+			H[i] /= log(2)
+			dH[i] /= log(2)
+			for (k,l) in enumerate(ulabels)
+				n = Entropy.counts(y[trial_labels.==l])
+					Hc[i,k],dHc[i,k] = Entropy.nsb_entropy(n,maximum(y))
+					Hc[i,k] /= log(2)
+					dHc[i,k] /= log(2)
 			end
+		catch ee
+			println("Problem computing entropy for bin $i location $l")
 		end
 	end
 	return GroupedTemporalEntropy(Hc,dHc,H,dH,bins,word_size, ulabels,trials_per_label)
