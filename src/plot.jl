@@ -6,10 +6,10 @@ function visualize{T<:String}(::Type{GroupedTemporalEntropy}, fnames::Array{T,1}
 	GTE = GroupedTemporalEntropy(fnames[1])
 	ta = plot(GTE)
 
-	function func3(ta,Q,i)
+	function func3(_ta,Q,i)
 		if i > 0 && i <= length(Q)
 			GTE = GroupedTemporalEntropy(Q[i])
-			plot(ta, GTE)
+			plot(_ta, GTE)
 		end
 	end
 	visualize(fnames,800,600,"Grouped Temporal Entropy", func3, ta)
@@ -24,12 +24,10 @@ function plot(H::GroupedTemporalEntropy)
 		   l = ((i-1)*nrows+j)
 		   if (l in H.group_labels) || (i==div(ncols,2)+1) && (j==div(nrows,2)+1)
 				ta[j,i] = Winston.FramedPlot()
-			else
-			    #println("Skipping $l")
 			end
 		end
 	end
-	plot(ta, H)
+	ta = plot(ta, H)
 	ta
 end
 
