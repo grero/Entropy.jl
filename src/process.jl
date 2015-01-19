@@ -20,7 +20,7 @@ function processTemporalEntropy(sptrains::Dict, bins::Array{Float64,1}, trials::
                     println("Processing cell $_cell")
 					spikes = Spiketrains.getTrialRaster(S,trials, :target,tmin,tmax)
 					psth = Spiketrains.getTrialSpikeCount(spikes, bins)
-					GTE = Entropy.GroupedTemporalEntropy(int(psth.counts),bins,trial_labels,word_size)
+					GTE = Entropy.GroupedTemporalEntropy(int(psth.counts),bins,trial_labels[1:psth.ntrials],word_size)
 					JLD.save(fname, {"GTE"=>GTE})
 				end
 			end
