@@ -15,7 +15,7 @@ function visualize{T<:String}(::Type{GroupedTemporalEntropy}, fnames::Array{T,1}
 	visualize(fnames,800,600,"Grouped Temporal Entropy", func3, ta)
 end
 
-function plot(H::GroupedTemporalEntropy)
+function plot(H::GroupedShannonEntropy)
 	nrows = int(ceil(sqrt(maximum(H.group_labels))))
 	ncols = nrows
 	ta = Winston.Table(nrows,ncols)
@@ -32,7 +32,7 @@ function plot(H::GroupedTemporalEntropy)
 end
 
 
-function plot(ta::Winston.Table,H::GroupedTemporalEntropy)
+function plot(ta::Winston.Table,H::GroupedShannonEntropy)
 	nrows = ta.rows
 	ncols = ta.cols
 	c = (div(nrows,2)+1 , div(ncols,2)+1)
