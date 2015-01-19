@@ -46,12 +46,24 @@ function plot(ta::Winston.Table,H::GroupedTemporalEntropy)
 		for j=1:nrows
 		   l = ((i-1)*nrows+j)
 			if !(l in H.group_labels)
-			    #println("Skipping $l")
 				continue
 			end
 			idx = find(H.group_labels.==l)
-			Winston.add(ta[j,i],Winston.FillBetween(bins, H.Hc[:,idx][:]-H.dHc[:,idx][:],
-													bins, H.Hc[:,idx][:] + H.dHc[:,idx][:]))
+			k = 1
+			bidx = find(!isfinite(H.Hc[:,idx]))
+			if !isempty(bidx)
+				for bi in bidx
+					if !(k in bidx)
+						Winston.add(ta[j,i],Winston.FillBetween(bins[k:bi-1], H.Hc[:,idx][k:bi-1]-H.dHc[:,idx][k:bi-1],
+																bins[k:bi-1], H.Hc[:,idx][k:bi-1] + H.dHc[:,idx][k:bi-1]))
+					end
+					k = bi + 1
+
+				end
+			end
+			Winston.add(ta[j,i],Winston.FillBetween(bins[k:end], H.Hc[:,idx][k:end]-H.dHc[:,idx][k:end],
+													bins[k:end], H.Hc[:,idx][k:end] + H.dHc[:,idx][k:end]))
+														
 			Winston.add(ta[j,i],Winston.Curve(bins, H.Hc[:,idx][:]))
 		    Winston.setattr(ta[j,i],"title","location $l")
 		    Winston.setattr(ta[j,i].x2,"draw_axis",false)
@@ -62,7 +74,20 @@ function plot(ta::Winston.Table,H::GroupedTemporalEntropy)
 	end
 	#plot the information in the center plot
 	p = ta[c...]
-	Winston.add(p, Winston.FillBetween(bins, H.I-H.dI, bins, H.I+H.dI))
+	k = 1
+	bidx = find(!isfinite(H.I))
+	if !isempty(bidx)
+		for bi in bidx
+			if !(k in bidx)
+				Winston.add(p,Winston.FillBetween(bins[k:bi-1], H.I[k:bi-1]-H.dI[k:bi-1],
+														bins[k:bi-1], H.I[k:bi-1] + H.dI[k:bi-1]))
+			end
+			k = bi + 1
+
+		end
+	end
+	Winston.add(p,Winston.FillBetween(bins[k:end], H.I[k:end]-H.dI[k:end],
+											bins[k:end], H.I[k:end] + H.dI[k:end]))
 	Winston.add(p, Winston.Curve(bins, H.I))
 	Winston.setattr(p.x2,"draw_axis",false)
 	Winston.setattr(p.y2,"draw_axis",false)
