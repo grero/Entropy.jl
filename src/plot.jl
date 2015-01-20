@@ -2,17 +2,17 @@ using Winston
 import Winston.plot
 import Visualizer.visualize
 
-function visualize{T<:String}(::Type{GroupedTemporalEntropy}, fnames::Array{T,1})
-	GTE = GroupedTemporalEntropy(fnames[1])
+function visualize{T<:String,T2<:GroupedShannonEntropy}(::Type{T2}, fnames::Array{T,1})
+	GTE = T2(fnames[1])
 	ta = plot(GTE)
 
 	function func3(_ta,Q,i)
 		if i > 0 && i <= length(Q)
-			GTE = GroupedTemporalEntropy(Q[i])
+			GTE = T2(Q[i])
 			plot(_ta, GTE)
 		end
 	end
-	visualize(fnames,800,600,"Grouped Temporal Entropy", func3, ta)
+	visualize(fnames,800,600,"Grouped Entropy", func3, ta)
 end
 
 function plot(H::GroupedShannonEntropy)
