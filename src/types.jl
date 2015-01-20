@@ -76,7 +76,7 @@ function GroupedTemporalEntropy(Hc::Array{Float64,2}, dHc::Array{Float64,2},H::A
 	for i=1:size(Hc,2)
 		for j=1:size(Hc,1)
 			_hc[j] += ps[i]*Hc[j,i]
-			_dhc[j] += ps[i]*dHc[j,i]*dHc[j,i] #variance
+			_dhc[j] += ps[i]*ps[i]*dHc[j,i]*dHc[j,i] #variance
 		end
 	end
 	I = H - _hc
@@ -101,7 +101,7 @@ function GroupedCountEntropy(Hc::Array{Float64,2}, dHc::Array{Float64,2},H::Arra
 	for i=1:size(Hc,2)
 		for j=1:size(Hc,1)
 			_hc[j] += ps[i]*Hc[j,i]
-			_dhc[j] += ps[i]*dHc[j,i]*dHc[j,i] #variance
+			_dhc[j] += ps[i]*ps[i]*dHc[j,i]*dHc[j,i] #variance
 		end
 	end
 	I = H - _hc
