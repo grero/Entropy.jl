@@ -36,6 +36,7 @@ type BinnedInformation <: ShannonEntropy
     end
 end
 
+
 type TemporalEntropy <: ShannonEntropy
 	H::Array{Float64,1}
 	bins::Array{Float64,1}
@@ -67,7 +68,26 @@ type GroupedCountEntropy <: GroupedShannonEntropy
 	trials_per_group::Array{Int64,1}
 end
 
+type GroupedPopulationEntropy <: GroupedShannonEntropy
+	Hc::Array{Float64,2}
+	dHc::Array{Float64,2}
+	H::Array{Float64,1}
+	dH::Array{Float64,1}
+	I::Array{Float64,1}
+	dI::Array{Float64,1}
+	bins::Array{Float64,1}
+	ncells::Integer
+	group_labels::Array{Int64,1}
+	trials_per_group::Array{Int64,1}
+end
 
+varname(::Type{GroupedTemporalEntropy})  = "GTE"
+varname(::Type{GroupedCountEntropy})  = "GCE"
+varname(::Type{GroupedPopulationEntropy})  = "GPE"
+
+filename(::Type{GroupedTemporalEntropy})  = "temporalEntropy.jd"
+filename(::Type{GroupedCountEntropy})  = "countEntropy.jd"
+filename(::Type{GroupedPopulationEntropy})  = "populationEntropy.jl"
 
 function GroupedTemporalEntropy(Hc::Array{Float64,2}, dHc::Array{Float64,2},H::Array{Float64,1},dH::Array{Float64,1}, bins::Array{Float64,1}, word_size::Integer, group_labels::Array{Int64,1},trials_per_group::Array{Int64,1})
 	ps = trials_per_group/sum(trials_per_group)
