@@ -30,7 +30,9 @@ function test_mlog_evidence()
 end
 
 S_nsb = init()
-B =  Entropy.NSBEntropy.B_xiK(1.2, S_nsb)
+ms = Entropy.meanS2(370.0850,[26,9,2], [1,2,3], 100)
+Base.Test.@test_approx_eq ms 20.0490
+B =  Entropy.B_xiK(1.2, S_nsb)
 Base.Test.@test_approx_eq B 1.3853866920075761
 
 nsb_mlog = Entropy.mlog_evidence(200*S_nsb.K,S_nsb)
