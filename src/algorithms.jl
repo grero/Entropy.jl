@@ -142,3 +142,57 @@ function GroupedCountEntropy(N::Array{Int64,2}, bins::Array{Float64,1}, trial_la
 	end
 	return GroupedCountEntropy(Hc,dHc,H,dH,bins,word_size, ulabels,trials_per_label)
 end
+
+function GroupedPopulationEntropy(N::Array{Int64,3}, bins::Array{Float64,1}, trial_labels::Array{Int64,1})
+	nbins,ntrials,ncells = size(N)
+	ulabels = sort(unique(trial_labels))
+	nlabels = length(ulabels)
+	H = NaN*zeros(nbins)
+	dH = NaN*zeros(H)
+	Hc = NaN*zeros(nbins,nlabels)
+	dHc = NaN*zeros(Hc)
+	trials_per_label = zeros(Int64,nlabels)
+	for (k,l) in enumerate(ulabels)
+		trials_per_label[k] = sum(trial_labels.==l)
+	end
+	for i=1:size(N,1)
+		y = Entropy.hash(squeeze(N[i,:,:],1)')
+		n = Entropy.counts(y)
+		try
+			H[i],dH[i] = Entropy.nsb_entropy(n,maximum(y))
+		catch ee
+			println("Problem computing entropy for bin $i")
+		end
+
+		H[i] /= log(2)
+		dH[i] /= log(2)
+		for (k,l) in enumerate(ulabels)
+			n = Entropy.counts(y[trial_labels.==l])
+			try
+				Hc[i,k],dHc[i,k] = Entropy.nsb_entropy(n,maximum(y))
+				Hc[i,k] /= log(2)
+				dHc[i,k] /= log(2)
+			catch ee
+				println("Problem computing entropy for bin $i location $l")
+			end
+		end
+	end
+	I,dI = compute_information(Hc,dHc, H, dH, trials_per_label)
+	return GroupedPopulationEntropy(Hc,dHc,H,dH,I,dI,bins,ncells, ulabels,trials_per_label)
+end
+
+function compute_information(Hc::Array{Float64,2}, dHc::Array{Float64,2},H::Array{Float64,1},dH::Array{Float64,1}, trials_per_group::Array{Int64,1})
+	ps = trials_per_group/sum(trials_per_group)
+	_hc = zeros(size(Hc,1))
+	_dhc = zeros(size(Hc,1))
+	for i=1:size(Hc,2)
+		for j=1:size(Hc,1)
+			_hc[j] += ps[i]*Hc[j,i]
+			_dhc[j] += ps[i]*ps[i]*dHc[j,i]*dHc[j,i] #variance
+		end
+	end
+	I = H - _hc
+	dI = sqrt(dH.*dH + _dhc)
+	return I, dI
+end
+
