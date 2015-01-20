@@ -84,8 +84,11 @@ function GroupedTemporalEntropy(Hc::Array{Float64,2}, dHc::Array{Float64,2},H::A
 	return GroupedTemporalEntropy(Hc,dHc,H,dH,I,dI,bins,word_size,group_labels,trials_per_group)
 end
 
-function GroupedTemporalEntropy(fname::String)
+function GroupedTemporalEntropy(fname::String;redo::Bool=false)
 	GTE = JLD.load(fname,"GTE")
+	if redo
+		GTE = GroupedTemporalEntropy(GTE.Hc, GTE.dHc, GTE.H, GTE.dH, GTE.bins, GTE.word_size, GTE.group_labels,GTE.trials_per_group)
+	end
 	return GTE
 end
 
