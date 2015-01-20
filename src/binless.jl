@@ -1,5 +1,6 @@
-import Distance
+import Distances
 import Base.Test
+import StatsBase.entropy
 
 function entropy{T<:Real}(D::Dict{Int64,Array{T,2}})
     E = Dict{Int64,Float64}()
@@ -46,7 +47,7 @@ function entropy{T<:Real}(X::Array{T,2})
     #find the minimum distance between pairs of columns
     ndims = size(X,1)
     N = size(X,2)
-    d = Distance.pairwise(Distance.Euclidean(),X)
+    d = Distances.pairwise(Distances.Euclidean(),X)
     #find the minimum distance for each pair
     d[d.==0] = Inf
     md = minimum(d,2)
