@@ -2,7 +2,11 @@ using Winston
 import Winston.plot
 import Visualizer.visualize
 
-function visualize{T<:String,T2<:GroupedShannonEntropy}(::Type{T2}, fnames::Array{T,1})
+visualize{T<:GroupedCountEntropy}(::Type{T}, fnames) = visualize(T, fnames, "Grouped Count Entropy")
+visualize{T<:GroupedTemporalEntropy}(::Type{T}, fnames) = visualize(T, fnames, "Grouped Temporal Entropy")
+visualize{T<:GroupedPopulationEntropy}(::Type{T}, fnames) = visualize(T, fnames, "Grouped Population Entropy")
+
+function visualize{T<:String,T2<:GroupedShannonEntropy}(::Type{T2}, fnames::Array{T,1},title::String)
 	GTE = T2(fnames[1])
 	ta = plot(GTE)
 
@@ -12,7 +16,7 @@ function visualize{T<:String,T2<:GroupedShannonEntropy}(::Type{T2}, fnames::Arra
 			plot(_ta, GTE)
 		end
 	end
-	visualize(fnames,800,600,"Grouped Entropy", func3, ta)
+	visualize(fnames,800,600,title, func3, ta)
 end
 
 function plot(H::GroupedShannonEntropy)
