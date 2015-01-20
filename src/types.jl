@@ -112,6 +112,10 @@ function GroupedCountEntropy(Hc::Array{Float64,2}, dHc::Array{Float64,2},H::Arra
 	return GroupedCountEntropy(Hc,dHc,H,dH,I,dI,bins,word_size,group_labels,trials_per_group)
 end
 
+function save(GTE::GroupedTemporalEntropy, fname::String)
+	JLD.save(fname, {"GTE" => GTE})
+end
+
 
 
 
