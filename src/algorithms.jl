@@ -122,7 +122,11 @@ function GroupedCountEntropy(N::Array{Int64,2}, bins::Array{Float64,1}, trial_la
 			end
 		end
 		n = Entropy.counts(y)
-		H[i],dH[i] = Entropy.nsb_entropy(n,maximum(y))
+		try
+			H[i],dH[i] = Entropy.nsb_entropy(n,maximum(y))
+		catch ee
+			println("Problem computing entropy for bin $i")
+		end
 		H[i] /= log(2)
 		dH[i] /= log(2)
 		for (k,l) in enumerate(ulabels)
