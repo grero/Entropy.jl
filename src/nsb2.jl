@@ -845,8 +845,7 @@ function meanS2(B::Real, S_nsb::NSBEntropy)
 	pnxb1 = psi(nxb+1.0)
 	p0NB2 = psi(N + B + 2.0)
 	p1NB2 = polygamma(1,N+B+2.0)
-
-	f = sum(nxb.*((pnxb1-p0NB2).*kx)*(nxb.*(pnxb1-p0NB2).*kx)' - sum((nxb.*kx).*(nxb.*kx))*p1NB2)
+	f = sum(nxb.*((pnxb1-p0NB2).*kx)*(nxb.*(pnxb1-p0NB2).*kx)' - (nxb.*kx)*(nxb.*kx)'*p1NB2)
 	f += sum(2*B*(1-K1/K)*nxb.*((pnxb1-p0NB2).*(psi(b+1)-p0NB2) - p1NB2).*kx)
 	f += (1-K1/K)*(1-(K1+1)/K)*B*B*((psi(b+1) - p0NB2)^2-p1NB2)
 	f += -sum((nxb.*(pnxb1 - p0NB2)).^2.*kx) + sum(nxb.*nxb.*kx)*p1NB2
