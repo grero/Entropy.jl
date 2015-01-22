@@ -33,6 +33,7 @@ function process{T<:GroupedShannonEntropy}(::Type{T},sptrains::Dict, bins::Array
 	tmin = minimum(bins)
 	tmax = maximum(bins)
 	trial_labels = Stimulus.getTrialLocationLabel(trials,:target)
+	fnames = Array(ASCIIString,length(cells))
     D = pmap( _cell -> begin
             fname = string(_cell,filename(T))
             if isfile(fname)
@@ -52,5 +53,8 @@ function process{T<:GroupedShannonEntropy}(::Type{T},sptrains::Dict, bins::Array
 			end
 			fname
 		end,cells)
-	return D
+		for (i,d) in enumerate(D)
+			fnames[i] = d
+		end
+	return fnames
 end
