@@ -1,4 +1,6 @@
 module Entropy
+using Docile
+@docstrings
 using HDF5, JLD
 include("types.jl")
 include("nsb2.jl")
