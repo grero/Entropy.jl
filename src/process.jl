@@ -1,7 +1,6 @@
 import Stimulus
 import Spiketrains
 import JLD
-
 function processTemporalEntropy(sptrains::Dict, bins::Array{Float64,1}, trials::Union(Array{Stimulus.Trial,1},Array{Stimulus.SaccadeTrial,1}),ncombos::Integer, word_size::Integer;skipMissing::Bool=false,alignment::Symbol=:target)
 	cells = Spiketrains.sortCells(sptrains)
 	tmin = minimum(bins)
