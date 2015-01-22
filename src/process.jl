@@ -28,6 +28,9 @@ function processTemporalEntropy(sptrains::Dict, bins::Array{Float64,1}, trials::
 	return D
 end
 
+@doc """
+	Process the spike trains specified in the dictionary ``sptrains`` by first binning them using ``bins`` and aligning them according to ``trials``. The optional keyword ``alignment`` specifies which trial event to align the spike trains to (defaults to :target). ``word_size`` specified the number of bins to conatenate before hashign the responses. The return value is an array of filenames, each containing the estimated entropy for each cell.
+""" [ :returns => Array{String,1} ] ->
 function process{T<:GroupedShannonEntropy}(::Type{T},sptrains::Dict, bins::Array{Float64,1}, trials::Union(Array{Stimulus.Trial,1},Array{Stimulus.SaccadeTrial,1}),ncombos::Integer, word_size::Integer;skipMissing::Bool=false,alignment::Symbol=:target)
 	cells = Spiketrains.sortCells(sptrains)
 	tmin = minimum(bins)
